@@ -24,152 +24,103 @@ const parsePrice = (min, max) => {
 };
 
 const calcTotals = (items) => {
-  return items.reduce((acc, item) => {
-    const [min, max] = parsePrice(item.min, item.max);
-    acc[0] += min;
-    acc[1] += max;
-    return acc;
+  return items.reduce(([min, max], item) => {
+    const [itemMin, itemMax] = parsePrice(item.min, item.max);
+    return [min + itemMin, max + itemMax];
   }, [0, 0]);
 };
 
-const formatRange = (min, max) => {
-  return min === max ? `$${min.toFixed(2)}` : `$${min.toFixed(2)} – $${max.toFixed(2)}`;
-};
-
-const openModal = (mode, context = null) => {
-  modalMode = mode;
-  modalContext = context;
-  modal.classList.remove("hidden");
-  modalForm.reset();
-  document.getElementById("modal-title").textContent = `Add ${mode}`;
-};
-
-cancelBtn.onclick = () => {
-  modal.classList.add("hidden");
-};
-
-modalForm.onsubmit = (e) => {
-  e.preventDefault();
-  const name = document.getElementById("modal-name").value.trim();
-  const description = document.getElementById("modal-description").value.trim();
-  const link = document.getElementById("modal-link").value.trim();
-  const min = document.getElementById("modal-min").value.trim();
-  const max = document.getElementById("modal-max").value.trim();
-
-  if (!name) return;
-
-  const item = { name, description, link, min, max };
-
-  if (modalMode === "Section") {
-    data.push({ name, subsections: [] });
-  } else if (modalMode === "Subsection") {
-    data[modalContext].subsections.push({ name, items: [] });
-  } else if (modalMode === "Item") {
-    const [sectionIdx, subsectionIdx] = modalContext;
-    data[sectionIdx].subsections[subsectionIdx].items.push(item);
-  }
-
-  save();
-  render();
-  modal.classList.add("hidden");
-};
-
-const render = () => {
+const updateDisplay = () => {
   container.innerHTML = "";
-  let grandMin = 0, grandMax = 0;
 
   if (data.length === 0) {
-    container.innerHTML = '<p class="no-data">No data yet. Tap “+ Section” to begin.</p>';
-    totalDisplay.textContent = "$0.00 – $0.00";
+    container.innerHTML = "<p class='no-data'>No data yet. Tap “+ Section” to begin.</p>";
+    totalDisplay.textContent = "$0.00";
     return;
   }
 
-  data.forEach((section, sIdx) => {
+  let totalMin = 0;
+  let totalMax = 0;
+
+  data.forEach((section, i) => {
     const sectionDiv = document.createElement("div");
     sectionDiv.className = "section";
 
     const sectionHeader = document.createElement("h2");
     sectionHeader.textContent = section.name;
-    sectionHeader.onclick = () => sectionDiv.classList.toggle("collapsed");
+    sectionDiv.appendChild(sectionHeader);
 
-    let sectionMin = 0, sectionMax = 0;
-    const subDiv = document.createElement("div");
+    let sectionMin = 0;
+    let sectionMax = 0;
 
-    section.subsections.forEach((sub, subIdx) => {
-      const subsectionDiv = document.createElement("div");
-      subsectionDiv.className = "subsection";
+    section.subsections.forEach((sub, j) => {
+      const subDiv = document.createElement("div");
+      subDiv.className = "subsection";
 
-      const subsectionHeader = document.createElement("h3");
-      subsectionHeader.textContent = sub.name;
-      subsectionHeader.onclick = () => subsectionDiv.classList.toggle("collapsed");
+      const subHeader = document.createElement("h3");
+      subHeader.textContent = sub.name;
+      subDiv.appendChild(subHeader);
 
       const itemList = document.createElement("ul");
-      let subMin = 0, subMax = 0;
 
-      sub.items.forEach(item => {
+      const [minSub, maxSub] = calcTotals(sub.items);
+      sectionMin += minSub;
+      sectionMax += maxSub;
+
+      sub.items.forEach((item) => {
+        const itemLi = document.createElement("li");
         const [min, max] = parsePrice(item.min, item.max);
-        subMin += min;
-        subMax += max;
-
-        const li = document.createElement("li");
-        li.className = "item";
-        const link = item.link ? `<a href="${item.link}" target="_blank">🔗</a>` : "";
-        li.innerHTML = `${item.name}: <strong>${formatRange(min, max)}</strong> ${link}`;
-        itemList.appendChild(li);
+        itemLi.innerHTML = \`\${item.name} — $\${min.toFixed(2)}\${max !== min ? ' - $' + max.toFixed(2) : ''}\`;
+        itemList.appendChild(itemLi);
       });
 
-      sectionMin += subMin;
-      sectionMax += subMax;
-
-      const totalLabel = document.createElement("div");
-      totalLabel.innerHTML = `<em>Total: ${formatRange(subMin, subMax)}</em>`;
-
-      subsectionDiv.appendChild(subsectionHeader);
-      subsectionDiv.appendChild(itemList);
-      subsectionDiv.appendChild(totalLabel);
-      subsectionDiv.appendChild(addButton("Item", () => openModal("Item", [sIdx, subIdx])));
-      subDiv.appendChild(subsectionDiv);
+      subDiv.appendChild(itemList);
+      sectionDiv.appendChild(subDiv);
     });
 
-    grandMin += sectionMin;
-    grandMax += sectionMax;
-
-    const sectionTotal = document.createElement("div");
-    sectionTotal.innerHTML = `<strong>Subtotal: ${formatRange(sectionMin, sectionMax)}</strong>`;
-    sectionTotal.style.marginBottom = "1em";
-
-    sectionDiv.appendChild(sectionHeader);
-    sectionDiv.appendChild(subDiv);
+    const sectionTotal = document.createElement("p");
+    sectionTotal.className = "section-total";
+    sectionTotal.textContent = \`Total: $\${sectionMin.toFixed(2)} - $\${sectionMax.toFixed(2)}\`;
     sectionDiv.appendChild(sectionTotal);
-    sectionDiv.appendChild(addButton("Subsection", () => openModal("Subsection", sIdx)));
+
+    totalMin += sectionMin;
+    totalMax += sectionMax;
+
     container.appendChild(sectionDiv);
   });
 
-  totalDisplay.textContent = formatRange(grandMin, grandMax);
+  totalDisplay.textContent = \`$\${totalMin.toFixed(2)} - $\${totalMax.toFixed(2)}\`;
 };
 
-const addButton = (label, action) => {
-  const btn = document.createElement("button");
-  btn.textContent = `+ ${label}`;
-  btn.onclick = action;
-  return btn;
-};
+addSectionBtn.addEventListener("click", () => {
+  modalMode = "section";
+  modalTitle.textContent = "Add Section";
+  modal.classList.remove("hidden");
+});
 
-addSectionBtn.onclick = () => openModal("Section");
-
-themeToggle.onclick = () => {
-  const theme = document.documentElement.getAttribute("data-theme");
-  const newTheme = theme === "dark" ? "light" : "dark";
-  document.documentElement.setAttribute("data-theme", newTheme);
-  localStorage.setItem("theme", newTheme);
-};
-
-window.onload = () => {
-  const storedTheme = localStorage.getItem("theme");
-  if (storedTheme) {
-    document.documentElement.setAttribute("data-theme", storedTheme);
-  } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-    document.documentElement.setAttribute("data-theme", "dark");
+modalForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const name = document.getElementById("modal-name").value;
+  if (modalMode === "section") {
+    data.push({ name, subsections: [] });
   }
-  render();
-};
+  save();
+  modal.classList.add("hidden");
+  modalForm.reset();
+  updateDisplay();
+});
+
+cancelBtn.addEventListener("click", () => {
+  modal.classList.add("hidden");
+});
+
+themeToggle.addEventListener("click", () => {
+  document.body.classList.toggle("dark");
+  localStorage.setItem("theme", document.body.classList.contains("dark") ? "dark" : "light");
+});
+
+if (localStorage.getItem("theme") === "dark") {
+  document.body.classList.add("dark");
+}
+
+updateDisplay();
